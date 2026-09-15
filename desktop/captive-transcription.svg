@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#0c4a6e"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="52" fill="url(#g)"/>
+
+  <!-- La scène : une silhouette qui parle, en haut. -->
+  <g opacity="0.5" fill="#fff">
+    <circle cx="128" cy="82" r="17"/>
+    <path d="M96 132a32 32 0 0 1 64 0z"/>
+  </g>
+
+  <!-- Les deux lignes de surtitres, en bas, ancrées : c'est tout ce que voit
+       le public. La ligne du bas est la plus récente, donc pleine opacité. -->
+  <g stroke-linecap="round">
+    <line x1="56" y1="172" x2="200" y2="172" stroke="#bae6fd" stroke-width="15" opacity="0.55"/>
+    <line x1="56" y1="203" x2="164" y2="203" stroke="#fff" stroke-width="15"/>
+  </g>
+</svg>

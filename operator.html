@@ -1,0 +1,1210 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Régie — surtitres</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 14px; background: #121212; color: #E6E6E6;
+         font: 14px/1.45 ui-sans-serif, system-ui, "Helvetica Neue", Arial, sans-serif; }
+  h1 { font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: #9A9A9A; margin: 0 0 12px; }
+  h2 { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #7C7C7C; margin: 0 0 8px; }
+  .panel { background: #1B1B1B; border: 1px solid #2A2A2A; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+  @media (max-width: 960px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { padding: 7px 11px; border-radius: 999px; background: #262626; border: 1px solid #333; font-size: 12px; font-weight: 700; }
+  .pill b { font-weight: 400; color: #8A8A8A; }
+  .pill.ok { background: #14331A; border-color: #2E7D32; }
+  .pill.warn { background: #3A2E05; border-color: #E6A700; }
+  .pill.bad { background: #3A1414; border-color: #C62828; }
+
+  button { font: inherit; font-weight: 700; padding: 10px 14px; background: #2C2C2C; color: #EAEAEA;
+           border: 1px solid #3C3C3C; border-radius: 6px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #383838; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: #1F5C2A; border-color: #2E7D32; }
+  button.danger { background: #5C1F1F; border-color: #C62828; }
+  button.big { font-size: 16px; padding: 14px 20px; }
+  button.on { background: #6B5100; border-color: #E6A700; }
+  select, input[type=range], input[type=text], textarea { font: inherit; background: #0C0C0C; color: #EAEAEA; border: 1px solid #3C3C3C; border-radius: 6px; padding: 8px; }
+  input[type=range] { padding: 0; }
+  textarea { width: 100%; resize: vertical; font: 13px/1.5 ui-monospace, monospace; }
+  label.inline { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #A8A8A8; }
+  .hint { font-size: 11px; color: #6A6A6A; margin-top: 6px; }
+  /* Mode fichier : les chemins se lisent et se copient, ils ne s'éditent pas. */
+  input.path { flex: 1; min-width: 180px; font: 12px ui-monospace, monospace; color: #B9B9B9; }
+
+  /* Vumètre : l'indicateur le plus important de tout le système. */
+  .vu-bar { position: relative; height: 26px; background: #0C0C0C; border: 1px solid #2A2A2A; border-radius: 4px; overflow: hidden; }
+  .vu-fill { position: absolute; inset: 0 auto 0 0; width: 0;
+             background: linear-gradient(90deg,#2E7D32 0%,#2E7D32 62%,#E6A700 82%,#C62828 100%);
+             transition: width 60ms linear; }
+  .alert { margin-top: 6px; padding: 7px 10px; border-radius: 4px; background: #C62828; color: #fff; font-weight: 700; display: none; }
+  .alert.on { display: block; }
+
+  /* Ce que voit le public, en petit. */
+  /* Aligné comme la vue publique : grille fixe langue × locuteur. */
+  #preview { background: #000; border: 1px solid #2A2A2A; border-radius: 6px; padding: 12px;
+             display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr 1fr;
+             column-gap: 14px; row-gap: 8px; font-weight: 500; }
+  #preview .pv-head { font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+                      color: #6A6A6A; border-bottom: 1px solid #262626; padding-bottom: 3px; }
+  #preview .pv-cell { font-size: 13px; min-height: 4.6em; overflow: hidden; padding-left: 6px;
+                      border-left: 3px solid transparent;
+                      display: flex; flex-direction: column; justify-content: flex-end; }
+  #preview .pv-cell[data-speaker="L"] { border-left-color: #8FD1E6; color: #8FD1E6; }
+  #preview .pv-cell[data-speaker="R"] { border-left-color: #E6C88F; color: #E6C88F; }
+  #preview .pv-cell div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #preview .pv-cell div:nth-last-child(3) { opacity: .55; }
+  #preview .pv-cell div:nth-last-child(n+4) { opacity: .3; }
+
+  /* Balance des deux micros : d'un coup d'œil on voit qui parle. */
+  .bal { position: relative; height: 8px; background: #0C0C0C; border: 1px solid #2A2A2A;
+         border-radius: 4px; margin-top: 6px; }
+  .bal-dot { position: absolute; top: -3px; width: 12px; height: 12px; border-radius: 50%;
+             background: #EAEAEA; transform: translateX(-50%); transition: left 90ms linear; }
+  .vu-label { font-size: 11px; color: #7C7C7C; min-width: 58px; }
+
+  /* La partial en cours et les mots validés : vue régie uniquement. */
+  #partial { font: 13px/1.5 ui-monospace, monospace; color: #6A6A6A; min-height: 3em;
+             background: #0C0C0C; border: 1px solid #2A2A2A; border-radius: 6px; padding: 8px; }
+  #partial b { color: #8FD18F; font-weight: 400; }
+  #log { height: 190px; overflow-y: auto; background: #0C0C0C; border: 1px solid #2A2A2A;
+         border-radius: 6px; padding: 8px; font: 12px/1.5 ui-monospace, monospace; }
+  #log div { white-space: pre-wrap; word-break: break-word; }
+  .t-sys { color: #6A9BD1; } .t-err { color: #FF7B7B; }
+  .t-fr { color: #8FD18F; } .t-en { color: #E0C070; }
+  table.m { width: 100%; font-size: 13px; border-collapse: collapse; }
+  table.m td { padding: 3px 0; }
+  table.m td:last-child { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kbd { display: inline-block; padding: 1px 6px; border: 1px solid #444; border-radius: 4px;
+         background: #222; font: 11px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+
+<h1>Régie — surtitrage FR → EN</h1>
+
+<div class="panel">
+  <div class="pills">
+    <div class="pill" id="p-ws"><b>Gladia</b> arrêté</div>
+    <div class="pill" id="p-tr"><b>Retard</b> —</div>
+    <div class="pill" id="p-time"><b>Session</b> 00:00:00</div>
+    <div class="pill" id="p-rec"><b>Enregistrement</b> aucun</div>
+    <div class="pill" id="p-disp"><b>Affichage</b> fermé</div>
+    <div class="pill" id="p-stereo"><b>Stéréo</b> —</div>
+  </div>
+</div>
+
+<div class="grid2">
+  <div>
+    <div class="panel">
+      <h2>Ce que voit le public</h2>
+      <div id="preview">
+        <div class="pv-head" style="grid-column:1;grid-row:1">Français</div>
+        <div class="pv-head" style="grid-column:2;grid-row:1">English</div>
+        <div class="pv-cell" data-speaker="L" data-stream="L:fr" style="grid-column:1;grid-row:2"></div>
+        <div class="pv-cell" data-speaker="L" data-stream="L:en" style="grid-column:2;grid-row:2"></div>
+        <div class="pv-cell" data-speaker="R" data-stream="R:fr" style="grid-column:1;grid-row:3"></div>
+        <div class="pv-cell" data-speaker="R" data-stream="R:en" style="grid-column:2;grid-row:3"></div>
+      </div>
+      <div style="font-size:11px;color:#6A6A6A;margin-top:6px">
+        Place FIXE par langue : colonne gauche = français, colonne droite = anglais.
+        Couleur = locuteur (G bleu, D ambre). Une case reçoit l'original quand la
+        personne parle cette langue, la traduction sinon — mais elle ne déménage jamais.
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="b-blackout" class="danger big">BLACKOUT <span class="kbd">B</span></button>
+        <button id="b-pause">Pause pipeline</button>
+        <button id="b-clear">Vider</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Entrées micro — un locuteur par canal</h2>
+      <div class="row" style="gap:8px;flex-wrap:nowrap">
+        <span class="vu-label" style="color:#8FD1E6">G · canal 0</span>
+        <div class="vu-bar" style="flex:1"><div class="vu-fill" id="vu-l"></div></div>
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:nowrap;margin-top:6px">
+        <span class="vu-label" style="color:#E6C88F">D · canal 1</span>
+        <div class="vu-bar" style="flex:1"><div class="vu-fill" id="vu-r"></div></div>
+      </div>
+      <div class="bal"><div class="bal-dot" id="bal" style="left:50%"></div></div>
+      <div style="font-size:11px;color:#6A6A6A;margin-top:4px">
+        Le point indique quel micro domine : c'est ce qui attribue chaque phrase
+        à une colonne. Il doit franchement pencher quand une seule personne parle.
+      </div>
+      <div class="alert" id="al">AUCUN SON DEPUIS 10 s</div>
+      <div class="row" style="margin-top:10px">
+        <select id="devices" style="flex:1;min-width:200px"><option value="">— autoriser le micro —</option></select>
+        <button id="b-perm">Autoriser</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="inline"><input type="checkbox" id="rec" checked> enregistrer l'audio sur disque</label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="b-stereo">Diagnostic stéréo</button>
+        <span style="font-size:11px;color:#6A6A6A;flex:1;min-width:200px">
+          Vérifie que les deux canaux portent bien deux signaux différents —
+          sans ça les deux colonnes sont interchangeables et rien ne le montre.
+        </span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Session</h2>
+      <div class="row" style="margin-bottom:10px">
+        <label class="inline">Moteur de traduction
+          <select id="engine">
+            <option value="gladia">Gladia natif — 1 clé, texte en fin de phrase</option>
+            <option value="claude">Claude Haiku — 2 clés, texte au fil de la phrase</option>
+          </select>
+        </label>
+        <span id="engine-note" style="font-size:11px;color:#6A6A6A"></span>
+      </div>
+      <div class="row">
+        <button id="b-start" class="primary big">DÉMARRER</button>
+        <button id="b-stop" class="danger" disabled>ARRÊTER</button>
+        <button id="b-reconnect" disabled>Reconnecter</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Lexique du spectacle <span id="vocab-count" style="color:#7C7C7C;font-weight:400"></span></h2>
+      <textarea id="vocab" rows="4" spellcheck="false"
+        placeholder="Un mot ou un nom par ligne — Captivea, Riss, Sébastien, Odoo…"></textarea>
+      <div style="font-size:11px;color:#6A6A6A;margin-top:6px">
+        Noms propres, marques, mots de métier. Ils servent DEUX fois : la
+        reconnaissance Gladia est biaisée vers eux, et la traduction Claude a
+        pour consigne de les recopier tels quels au lieu de les traduire.
+        Enregistré dans ce navigateur, pris en compte au prochain DÉMARRAGE.
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="b-vocab-reset">Revenir au lexique par défaut</button>
+        <span id="vocab-note" style="font-size:11px;color:#6A6A6A"></span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h2>Mesures</h2>
+      <table class="m">
+        <tr><td>Retard réel / visé (médiane)</td><td id="m-med">—</td></tr>
+        <tr><td>Retard p95</td><td id="m-p95">—</td></tr>
+        <tr><td>Mots en retard sur la cible</td><td id="m-late">—</td></tr>
+        <tr><td>Trou max entre deux mots</td><td id="m-gap">—</td></tr>
+        <tr><td>Divergence validé / final</td><td id="m-div">—</td></tr>
+        <tr><td>Blocs / mots en attente (moteur Claude)</td><td id="m-pending">—</td></tr>
+        <tr><td>Mots affichés</td><td id="m-blocks">—</td></tr>
+        <tr><td>Mots en file d'affichage</td><td id="m-queued">—</td></tr>
+        <tr><td>Énoncés traduits</td><td id="m-utt">—</td></tr>
+        <tr><td>Répartition G / D (mots)</td><td id="m-split">—</td></tr>
+        <tr><td>Énoncés non attribués (locuteur gardé)</td><td id="m-unattr">—</td></tr>
+        <tr><td>Moteur de traduction</td><td id="m-engine">—</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Partial en cours <span style="color:#8FD18F;font-weight:400">— vert = validé</span></h2>
+      <div id="partial"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Réglages à chaud</h2>
+      <div class="row">
+        <label class="inline" style="flex:1">Police
+          <input type="range" id="font" min="3" max="14" step="0.25" style="flex:1">
+          <b id="font-val" style="min-width:64px;text-align:right;color:#EAEAEA">6.5 vh</b></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="inline" style="flex:1">Retard à l'écran
+          <input type="range" id="delay" min="2000" max="9000" step="250" style="flex:1">
+          <b id="delay-val" style="min-width:64px;text-align:right;color:#EAEAEA">6000 ms</b></label>
+      </div>
+      <div style="font-size:12px;color:#7C7C7C;margin-top:4px">
+        Retard constant entre la voix et l'écran. Les mots s'écrivent au rythme
+        où ils ont été dits. En moteur Gladia, 6000 ms est le plancher : en
+        dessous, les premiers mots d'une longue phrase sortent en rattrapage.
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="b-open">Ouvrir la fenêtre d'affichage</button>
+      </div>
+      <div class="row" style="margin-top:12px;border-top:1px solid #2A2A2A;padding-top:12px">
+        <label class="inline"><input type="checkbox" id="obs">
+          mode fichier — écrire les surtitres dans des .txt (OBS)</label>
+      </div>
+      <div id="obs-paths" hidden>
+        <div class="row" style="margin-top:8px;flex-wrap:nowrap">
+          <span class="vu-label">Français</span>
+          <input type="text" class="path" id="obs-path-fr" readonly value="—">
+          <button id="b-copy-fr">Copier</button>
+        </div>
+        <div class="row" style="margin-top:6px;flex-wrap:nowrap">
+          <span class="vu-label">English</span>
+          <input type="text" class="path" id="obs-path-en" readonly value="—">
+          <button id="b-copy-en">Copier</button>
+        </div>
+        <div class="hint" id="obs-note">
+          Dans OBS : source <b>Texte (GDI+)</b> → cocher « Lire à partir d'un fichier »
+          → coller le chemin. Le fichier existe déjà, vide : il est sélectionnable
+          avant même de démarrer la session. Deux lignes au plus, le blackout le vide.
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Journal</h2>
+      <div id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+// ===========================================================================
+//  Vue régie. Détient le micro, la WebSocket Gladia, le pipeline, la file de
+//  traduction et le fichier WAV. La vue publique ne reçoit que des lignes.
+// ===========================================================================
+import { CONFIG, CHANNEL } from './config/surtitles.js';
+import { createPipeline } from './src/pipeline.js';
+import { createTranslator, httpTranslate } from './src/translator.js';
+import { createFeed } from './src/feed.js';
+import { createSpeakerTracker } from './src/speakers.js';
+import { createStereoCheck } from './src/stereo.js';
+import { createCaptionBuffer } from './src/captions.js';
+
+const $ = (id) => document.getElementById(id);
+const bc = new BroadcastChannel(CHANNEL);
+const cfg = { ...CONFIG };
+
+let gladiaKey = '';
+let running = false, stopping = false, paused = false, blackout = false;
+let stream = null, ctx = null, node = null, srcNode = null;
+let ws = null, sessionUrl = null;
+let fileHandle = null, writable = null, writeChain = Promise.resolve();
+let bytesWritten = 0, framesWritten = 0;
+let sessionStart = 0, wsAttempts = 0, reconnectTimer = null;
+let peakL = 0, peakR = 0, lastSound = 0;
+let feeds = new Map(), pipeline, translator, speakers;
+// Mode fichier (OBS) : le tampon suit l'écran en permanence, même décoché —
+// cocher en cours de spectacle doit remplir le fichier tout de suite, pas
+// attendre la phrase suivante.
+const captions = createCaptionBuffer(CONFIG);
+// Contrôle de la séparation des deux canaux. Il tourne en permanence : c'est une
+// panne silencieuse, elle ne se voit que si on la surveille.
+let stereo = createStereoCheck(cfg);
+let trackChannels = 0, stereoAnnounced = false;
+
+// --- journal ---------------------------------------------------------------
+function log(text, cls = 't-sys') {
+  const el = $('log');
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = `${new Date().toLocaleTimeString('fr-FR')}  ${text}`;
+  el.appendChild(d);
+  while (el.childElementCount > 250) el.firstElementChild.remove();
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+const logErr = (t) => log(t, 't-err');
+
+// Le journal suit l'écran mot à mot : une entrée par LIGNE affichée, qui
+// s'allonge à mesure que ses mots sortent. Une entrée par mot noierait tout.
+// Une entrée par flux : les deux locuteurs s'écrivent en parallèle, chacun garde
+// donc sa propre ligne en cours dans le journal.
+const liveLines = new Map();   // flux -> { id, node }
+function logLine(unit, line) {
+  if (!line) return;
+  const el = $('log');
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  let cur = liveLines.get(unit.key);
+  if (!cur || cur.id !== line.id || !cur.node.isConnected) {
+    const node = document.createElement('div');
+    // L'original en vert (ce qui a été dit), la traduction en ambre (ce qui est
+    // lu par le public) : la même convention que depuis le début. À l'écran
+    // public les deux sont identiques — la distinction n'intéresse que la régie.
+    node.className = unit.meta?.kind === 'src' ? 't-fr' : 't-en';
+    el.appendChild(node);
+    while (el.childElementCount > 250) el.firstElementChild.remove();
+    cur = { id: line.id, node };
+    liveLines.set(unit.key, cur);
+  }
+  const sp = unit.meta?.speaker === 'R' ? 'D' : 'G';
+  const lang = unit.meta?.lang ? ` ${String(unit.meta.lang).toUpperCase()}` : '';
+  const arrow = unit.meta?.kind === 'src' ? '·' : '⇢';
+  cur.node.textContent = `${sp}${lang} ${arrow} ${line.text}`
+    + (unit.latency != null ? `   (${Math.round(unit.latency)} ms)` : '');
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+window.addEventListener('error', (e) => logErr('JS: ' + e.message));
+window.addEventListener('unhandledrejection', (e) => logErr('Promesse: ' + (e.reason?.message || e.reason)));
+
+const setPill = (id, text, cls, label) => {
+  const el = $(id);
+  el.className = 'pill' + (cls ? ' ' + cls : '');
+  el.innerHTML = `<b>${label}</b> ${text}`;
+};
+
+// --- clés ------------------------------------------------------------------
+let anthropicMissing = false;
+(async () => {
+  try {
+    const r = await fetch('/api/health');
+    const h = await r.json();
+    anthropicMissing = !h.anthropic;
+    const engine = $('engine').value;
+    if (engine === 'claude' && anthropicMissing) {
+      logErr('ANTHROPIC_API_KEY absente de .env — la traduction ne marchera pas.');
+    }
+    log(`Moteur de traduction : ${engine === 'gladia'
+      ? 'Gladia (natif, texte en fin de phrase)' : 'Claude Haiku (par bloc)'}`);
+    log(`Langues : ${cfg.LANGUAGES.join(' / ')} détectées automatiquement, `
+      + `traduction vers l'autre. ${cfg.TWO_SPEAKERS ? 'Deux locuteurs (canaux 0 et 1).' : 'Un locuteur.'}`);
+    gladiaKey = (await (await fetch('/api/key')).json()).key || '';
+    log(gladiaKey ? 'Clé Gladia chargée.' : 'AUCUNE clé Gladia dans .env', gladiaKey ? 't-sys' : 't-err');
+  } catch {
+    logErr('Serveur local injoignable. Lancez  node server.mjs');
+  }
+})();
+
+// --- pipeline --------------------------------------------------------------
+function buildPipeline() {
+  // Le moteur est figé au démarrage : le sélecteur est grisé pendant la session,
+  // parce que la config de session Gladia (traduction native ou pas) en dépend.
+  cfg.TRANSLATION_ENGINE = $('engine').value;
+  // Le lexique est figé maintenant : la session Gladia va être configurée avec,
+  // et la file de traduction le lira dans cfg à chaque bloc.
+  cfg.VOCABULARY = vocabList();
+  if (cfg.VOCABULARY.length) {
+    log(`Lexique (${cfg.VOCABULARY.length}) : ${cfg.VOCABULARY.join(', ')}`);
+  } else {
+    log('Lexique vide — aucun biais de reconnaissance, aucune protection des noms propres.');
+  }
+  $('vocab-note').textContent = '';
+  // Le retard du moteur retenu, au cas où la page a été chargée puis le moteur
+  // changé sans repasser par le curseur.
+  applyEngineDelay();
+  log(`Retard visé : ${cfg.DISPLAY_DELAY_MS} ms (plancher du moteur ${cfg.TRANSLATION_ENGINE}).`);
+
+  // Qui parle : l'énergie des deux canaux, alimentée par le worklet.
+  speakers = createSpeakerTracker(cfg);
+
+  // En moteur 'gladia' la traduction vient de Gladia : pas de file maison,
+  // pas de clé Anthropic, pas d'appel sortant supplémentaire.
+  translator = cfg.TRANSLATION_ENGINE === 'claude'
+    ? createTranslator(cfg, {
+        translate: httpTranslate('/api/translate'),
+        onResult: (b) => pipeline.onTranslated(b),
+        onError: (b, e) => logErr(`bloc abandonné « ${b.text.slice(0, 40)} » : ${e?.message || 'échec'}`),
+      })
+    : null;
+
+  pipeline = createPipeline(cfg, {
+    translator,
+    speakerOf: (start, end) => speakers.speakerOf(start, end),
+    // Un MOT à la fois, à l'instant exact où il doit apparaître à l'écran.
+    // `u.key` dit dans quel flux : 'L:src', 'L:tgt', 'R:src', 'R:tgt'.
+    onDisplay: (u) => {
+      if (paused) return;
+      const feed = feeds.get(u.key);
+      if (!feed) return;
+      const lines = feed.append(u.text, { breakBefore: u.breakBefore });
+      bc.postMessage({ type: 'stream', key: u.key, lines });
+      renderPreview();
+      logLine(u, lines[lines.length - 1]);
+      captions.push(u, lines);
+      captionSchedule();
+      lastDisplay = performance.now();
+    },
+    onEvent: (e) => {
+      if (e.type === 'partial') showPartial(e.text, e.lang);
+      else if (e.type === 'words_committed') { committed += ' ' + e.text; showPartial(); }
+      else if (e.type === 'final') { committed = ''; }
+      else if (e.type === 'gladia_error') logErr('Gladia : ' + JSON.stringify(e.error).slice(0, 200));
+    },
+  });
+
+  feeds = new Map(pipeline.stageKeys.map((k) => [k, createFeed(cfg)]));
+  liveLines.clear();
+}
+
+let committed = '', lastPartial = '', lastLang = '', lastDisplay = 0;
+function showPartial(text, lang) {
+  if (text !== undefined) lastPartial = text;
+  if (lang) lastLang = String(lang).toUpperCase();
+  // Vert = déjà validé et parti dans le pipeline ; gris = encore instable.
+  const c = committed.trim();
+  const rest = c && lastPartial.startsWith(c) ? lastPartial.slice(c.length) : lastPartial;
+  $('partial').innerHTML = (lastLang ? `<i style="color:#6A9BD1">[${lastLang}]</i> ` : '')
+    + `<b>${escapeHtml(c)}</b> ${escapeHtml(rest)}`;
+}
+const escapeHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+// Le preview reflète les quatre flux, comme l'écran public.
+const previewBoxes = new Map(
+  [...document.querySelectorAll('#preview [data-stream]')].map((el) => [el.dataset.stream, el])
+);
+function renderPreview() {
+  for (const [key, el] of previewBoxes) {
+    const lines = feeds.get(key)?.lines() ?? [];
+    el.replaceChildren(...lines.map((l) => {
+      const d = document.createElement('div'); d.textContent = l.text; return d;
+    }));
+  }
+}
+
+// --- périphériques ---------------------------------------------------------
+async function refreshDevices(ask) {
+  try {
+    if (ask) (await navigator.mediaDevices.getUserMedia({ audio: true })).getTracks().forEach((t) => t.stop());
+    const list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+    const sel = $('devices');
+    const remembered = cfg.AUDIO_DEVICE_ID || localStorage.getItem('deviceId') || '';
+    sel.replaceChildren(...list.map((d) => {
+      const o = document.createElement('option');
+      o.value = d.deviceId; o.textContent = d.label || `entrée ${d.deviceId.slice(0, 6)}`;
+      return o;
+    }));
+    if (remembered && list.some((d) => d.deviceId === remembered)) sel.value = remembered;
+    log(`${list.length} entrée(s) audio.`);
+  } catch (e) { logErr('Périphériques : ' + e.message); }
+}
+$('b-perm').onclick = () => refreshDevices(true);
+$('devices').onchange = () => localStorage.setItem('deviceId', $('devices').value);
+refreshDevices(false);
+
+// --- WAV (mono, fréquence de capture) --------------------------------------
+const PROVISIONAL = 0xffffffff - 36;
+// L'enregistrement est STÉRÉO quand il y a deux locuteurs : c'est la seule
+// donnée irremplaçable, et un mixage mono perdrait la séparation des voix —
+// donc la possibilité de rejouer l'attribution après coup.
+const wavChannels = () => (cfg.TWO_SPEAKERS ? 2 : 1);
+function wavHeader(dataSize) {
+  const buf = new ArrayBuffer(44), v = new DataView(buf);
+  const ch = wavChannels(), bits = 16, rate = cfg.CAPTURE_RATE, align = (ch * bits) / 8;
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, dataSize + 36, true); str(8, 'WAVE');
+  str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+  v.setUint16(22, ch, true); v.setUint32(24, rate, true);
+  v.setUint32(28, rate * align, true); v.setUint16(32, align, true); v.setUint16(34, bits, true);
+  str(36, 'data'); v.setUint32(40, dataSize, true);
+  return buf;
+}
+function diskWrite(data) {
+  writeChain = writeChain.then(() => writable.write(data)).catch((e) => {
+    logErr('ÉCRITURE DISQUE : ' + e.message);
+    setPill('p-rec', 'ERREUR', 'bad', 'Enregistrement');
+  });
+  return writeChain;
+}
+
+// --- lexique du spectacle --------------------------------------------------
+//
+//  Une liste de noms propres, éditable en répétition et mémorisée dans le
+//  navigateur. Elle part à DEUX endroits : la config de session Gladia (biais de
+//  reconnaissance) et le prompt de traduction (interdiction de traduire ces
+//  mots). Les deux sont figés au démarrage — la session Gladia se configure à
+//  l'ouverture de la WebSocket, on ne la change pas en vol.
+const VOCAB_KEY = 'vocabulary';
+function parseVocab(text) {
+  // Une entrée par ligne, mais on tolère les virgules : c'est comme ça qu'on
+  // écrit une liste quand on va vite.
+  return [...new Set(String(text).split(/[\n,;]+/)
+    .map((w) => w.trim())
+    .filter((w) => w !== '' && w.length <= 40))]
+    .slice(0, cfg.MAX_VOCABULARY ?? 60);
+}
+function vocabList() {
+  const saved = localStorage.getItem(VOCAB_KEY);
+  return saved === null ? (CONFIG.VOCABULARY ?? []) : parseVocab(saved);
+}
+function refreshVocabCount() {
+  const n = vocabList().length;
+  const max = cfg.MAX_VOCABULARY ?? 60;
+  $('vocab-count').textContent = `— ${n} mot${n > 1 ? 's' : ''}`
+    + (n >= max ? ` (plafond ${max})` : '');
+}
+{
+  const saved = localStorage.getItem(VOCAB_KEY);
+  $('vocab').value = saved === null ? (CONFIG.VOCABULARY ?? []).join('\n') : saved;
+  refreshVocabCount();
+  $('vocab').oninput = () => {
+    localStorage.setItem(VOCAB_KEY, $('vocab').value);
+    refreshVocabCount();
+    $('vocab-note').textContent = running
+      ? 'pris en compte au prochain démarrage' : 'enregistré';
+  };
+  $('b-vocab-reset').onclick = () => {
+    localStorage.removeItem(VOCAB_KEY);
+    $('vocab').value = (CONFIG.VOCABULARY ?? []).join('\n');
+    refreshVocabCount();
+    $('vocab-note').textContent = 'lexique par défaut restauré';
+  };
+}
+
+// --- Gladia ----------------------------------------------------------------
+function sessionBody() {
+  const vocab = cfg.VOCABULARY ?? [];
+  return {
+    encoding: 'wav/pcm', sample_rate: cfg.SEND_RATE, bit_depth: 16, channels: 1,
+    model: 'solaria-1',
+    endpointing: cfg.ENDPOINTING,
+    maximum_duration_without_endpointing: cfg.MAX_DURATION_WITHOUT_ENDPOINTING,
+    // DEUX langues et code-switching : on ne sait pas qui parle quelle langue,
+    // et chacun peut passer de l'une à l'autre. Le code-switching dégrade un peu
+    // les partials — mais transcrire de l'anglais comme si c'était du français
+    // les dégrade infiniment plus. C'est le seul cas qui le justifie.
+    language_config: { languages: cfg.LANGUAGES, code_switching: !!cfg.CODE_SWITCHING },
+    messages_config: {
+      // Sans ça, aucun partial n'arrive (défaut Gladia : false) et tout le
+      // pipeline est privé de sa source.
+      receive_partial_transcripts: true,
+      receive_final_transcripts: true,
+      receive_speech_events: true,
+      receive_acknowledgments: false,
+      receive_lifecycle_events: true,
+      receive_errors: true,
+    },
+    realtime_processing: {
+      // Le lexique du spectacle : les noms propres sont ce que la
+      // reconnaissance rate le plus. Vérifié contre l'API — la validation est
+      // stricte (un champ inventé renvoie 400), donc ces noms-là sont les bons.
+      // On n'envoie le bloc que s'il y a des mots : `custom_vocabulary: true`
+      // avec une liste vide serait une contrainte pour rien.
+      ...(vocab.length > 0 ? {
+        custom_vocabulary: true,
+        custom_vocabulary_config: {
+          vocabulary: vocab,
+          default_intensity: cfg.VOCABULARY_INTENSITY ?? 0.5,
+        },
+      } : {}),
+      // Moteur 'gladia' : on demande la traduction à Gladia, vers LES DEUX
+      // langues — on ne sait pas laquelle sera parlée. Conséquence : Gladia
+      // renvoie aussi la traduction identité (fr → fr), que le pipeline filtre.
+      // Moteur 'claude' : on ne la demande pas — elle est liée à l'utterance
+      // finale, donc plafonnée par la segmentation, et on traduit nous-mêmes,
+      // dans la direction détectée.
+      ...(cfg.TRANSLATION_ENGINE === 'gladia' ? {
+        translation: true,
+        translation_config: {
+          target_languages: cfg.LANGUAGES,
+          model: cfg.GLADIA_TRANSLATION_MODEL || 'base',
+          match_original_utterances: true,
+        },
+      } : {}),
+    },
+  };
+}
+
+async function initSession() {
+  if (!gladiaKey) throw new Error('clé Gladia absente');
+  const r = await fetch('https://api.gladia.io/v2/live', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-gladia-key': gladiaKey },
+    body: JSON.stringify(sessionBody()),
+  });
+  const txt = await r.text();
+  if (!r.ok) {
+    if (r.status === 429) throw new Error('429 — une seule WebSocket simultanée. Fermez l\'autre onglet.');
+    if (r.status === 401) throw new Error('401 — clé Gladia refusée.');
+    throw new Error(`init ${r.status} : ${txt.slice(0, 200)}`);
+  }
+  const j = JSON.parse(txt);
+  log('Session Gladia : ' + j.id);
+  return j;
+}
+
+function openSocket(url) {
+  ws = new WebSocket(url);
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => { wsAttempts = 0; setPill('p-ws', 'connecté', 'ok', 'Gladia'); log('WebSocket ouverte.'); };
+  ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; } pipeline.onGladiaMessage(m); };
+  ws.onerror = () => logErr('WebSocket : erreur réseau.');
+  ws.onclose = ({ code, reason }) => {
+    if (stopping || !running) { setPill('p-ws', 'fermé', '', 'Gladia'); return; }
+    logErr(`WebSocket fermée (code ${code}${reason ? ' — ' + reason : ''}).`);
+    scheduleReconnect();
+  };
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer || stopping || !running) return;
+  wsAttempts++;
+  const delay = Math.min(cfg.RECONNECT_MAX_DELAY_MS, 500 * 2 ** (wsAttempts - 1));
+  setPill('p-ws', `reconnexion ${wsAttempts} dans ${(delay / 1000).toFixed(1)}s`, 'warn', 'Gladia');
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    if (stopping || !running) return;
+    try {
+      if (wsAttempts <= cfg.RECONNECT_MAX_SAME_URL && sessionUrl) { log('Reconnexion…'); openSocket(sessionUrl); }
+      else { log('Nouvelle session Gladia…'); const s = await initSession(); sessionUrl = s.url; openSocket(sessionUrl); }
+    } catch (e) { logErr('Reconnexion : ' + e.message); scheduleReconnect(); }
+  }, delay);
+}
+
+// --- audio -----------------------------------------------------------------
+const DOWN = Math.round(cfg.CAPTURE_RATE / cfg.SEND_RATE);
+function downsampleMono(pcm, factor) {
+  if (factor <= 1) return pcm;
+  const out = new Int16Array(Math.floor(pcm.length / factor));
+  for (let i = 0; i < out.length; i++) {
+    let s = 0;
+    for (let k = 0; k < factor; k++) s += pcm[i * factor + k];
+    out[i] = (s / factor) | 0;
+  }
+  return out;
+}
+
+async function startAudio(deviceId) {
+  const audio = {
+    // Impératifs : activés, Chrome applique des traitements qui abîment la
+    // reconnaissance. echoCancellation force en plus un down-mix mono, ce qui
+    // détruirait la séparation des deux locuteurs.
+    echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+    sampleRate: cfg.CAPTURE_RATE,
+    channelCount: cfg.TWO_SPEAKERS ? 2 : 1,
+  };
+  if (deviceId) audio.deviceId = { exact: deviceId };
+  stream = await navigator.mediaDevices.getUserMedia({ audio });
+
+  const track = stream.getAudioTracks()[0];
+  const s = track.getSettings();
+  log(`Entrée : « ${track.label} » — ${s.sampleRate ?? '?'} Hz, ${s.channelCount ?? '?'} canal/canaux`);
+  // `channelCount` est ce que Chrome ANNONCE ; la corrélation mesurée dira si les
+  // deux canaux portent vraiment deux signaux. Les deux sont utiles : l'annonce
+  // arrive tout de suite, la mesure demande quelques secondes de parole.
+  trackChannels = s.channelCount ?? (cfg.TWO_SPEAKERS ? 2 : 1);
+  stereo.reset();
+  stereoAnnounced = false;
+  setPill('p-stereo', cfg.TWO_SPEAKERS ? 'mesure…' : 'sans objet (1 locuteur)', '', 'Stéréo');
+  if (s.echoCancellation || s.noiseSuppression || s.autoGainControl) {
+    logErr('ATTENTION : un traitement navigateur est resté actif (echo/noise/AGC).');
+  }
+  // Sans deux canaux réels, l'attribution des locuteurs est impossible : autant
+  // le dire tout de suite, en répétition, plutôt que de le découvrir en scène.
+  if (cfg.TWO_SPEAKERS && s.channelCount === 1) {
+    logErr('ATTENTION : cette entrée est MONO — les deux locuteurs ne peuvent pas '
+         + 'être séparés. Choisissez l\'entrée stéréo de l\'interface (les deux micros).');
+  }
+
+  ctx = new AudioContext({ sampleRate: cfg.CAPTURE_RATE, latencyHint: 'interactive' });
+  if (ctx.sampleRate !== cfg.CAPTURE_RATE) {
+    logErr(`AudioContext à ${ctx.sampleRate} Hz : en-tête WAV ajusté.`);
+    cfg.CAPTURE_RATE = ctx.sampleRate;
+  }
+  // La fréquence réelle est connue seulement maintenant : le contrôle stéréo
+  // compte des secondes de signal, il lui faut la bonne.
+  stereo.reset(cfg.CAPTURE_RATE);
+  await ctx.audioWorklet.addModule('pcm-worklet.js');
+
+  srcNode = ctx.createMediaStreamSource(stream);
+  node = new AudioWorkletNode(ctx, 'pcm-chunker', {
+    numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+    // channelCount* : sans ça Chrome peut down-mixer l'entrée en mono AVANT le
+    // worklet, et les deux locuteurs se retrouveraient sur un seul canal.
+    channelCount: cfg.TWO_SPEAKERS ? 2 : 1,
+    channelCountMode: 'explicit',
+    channelInterpretation: 'discrete',
+    processorOptions: {
+      sampleRate: cfg.CAPTURE_RATE, chunkMs: cfg.CHUNK_MS,
+      channelL: cfg.SPEAKERS?.[0]?.channel ?? cfg.SOURCE_CHANNEL ?? 0,
+      channelR: cfg.TWO_SPEAKERS ? (cfg.SPEAKERS?.[1]?.channel ?? 1)
+                                 : (cfg.SPEAKERS?.[0]?.channel ?? 0),
+      stereo: !!cfg.TWO_SPEAKERS,
+    },
+  });
+  // onmessage est branché APRÈS l'écriture de l'en-tête WAV, dans start().
+  const sink = ctx.createGain();
+  sink.gain.value = 0;
+  srcNode.connect(node);
+  node.connect(sink).connect(ctx.destination);
+  if (ctx.state === 'suspended') await ctx.resume();
+}
+
+// --- contrôle de la séparation stéréo --------------------------------------
+//
+//  Une entrée « stéréo » qui n'est qu'un canal dupliqué ne casse RIEN de visible :
+//  les vumètres bougent, Gladia transcrit, la traduction sort. Seules les deux
+//  colonnes deviennent un tirage au sort. On mesure donc la corrélation des deux
+//  canaux en continu, et on l'annonce UNE FOIS, dès qu'il y a assez de signal.
+//
+//  Le même calcul existe dans tools/check-stereo.mjs, hors du navigateur : si ce
+//  script dit « stéréo réelle » et que la pastille ici dit « canaux identiques »,
+//  c'est le navigateur qui remixe, pas le PC. C'est toute l'utilité de partager
+//  src/stereo.js entre les deux.
+const STEREO_CLASS = { ok: 'ok', suspect: 'warn', duplicated: 'bad', mono: 'bad', waiting: '' };
+function stereoTick(d) {
+  stereo.push(d);
+  const v = stereo.verdict(trackChannels);
+  setPill('p-stereo', v.label, STEREO_CLASS[v.state] ?? '', 'Stéréo');
+  if (stereoAnnounced || v.state === 'waiting') return;
+  stereoAnnounced = true;
+  if (v.state === 'ok') {
+    log(`Séparation stéréo vérifiée : ${v.detail}`);
+    return;
+  }
+  logErr(`SÉPARATION STÉRÉO — ${v.label} : ${v.detail}`);
+  logErr('Les deux locuteurs ne peuvent PAS être séparés : les colonnes G et D '
+       + 'seront attribuées au hasard. Diagnostic hors navigateur :  '
+       + 'node tools/check-stereo.mjs');
+}
+
+/** Bouton « Diagnostic stéréo » : les mêmes chiffres que le script en ligne de commande. */
+function stereoReport() {
+  const v = stereo.verdict(trackChannels);
+  const r = stereo.correlation();
+  log('— Diagnostic stéréo ——————————————');
+  log(`  entrée annoncée     : ${trackChannels || '?'} canal/canaux`);
+  log(`  signal accumulé     : ${stereo.seconds().toFixed(1)} s`);
+  log(`  corrélation G/D     : ${r === null ? '—' : r.toFixed(5)}`);
+  log(`  écart max G−D       : ${stereo.maxDiff().toFixed(6)}`);
+  log(`  verdict             : ${v.label} — ${v.detail}`);
+  if (v.state === 'waiting') {
+    log('  Parlez dans UN SEUL micro quelques secondes : deux silences sont');
+    log('  toujours « identiques », il faut du signal pour trancher.');
+  } else if (v.state !== 'ok') {
+    log('  Comparez avec le système, hors navigateur :');
+    log('     node tools/check-stereo.mjs --seconds 8');
+    log('  Même verdict là-bas  → le problème est dans le PC (câble, carte son,');
+    log('                         mode du récepteur HF, profil PipeWire).');
+    log('  « STÉRÉO RÉELLE » là-bas → le problème est ici, dans le navigateur :');
+    log('                         mauvaise entrée choisie, ou down-mix Chrome.');
+  }
+}
+$('b-stereo').onclick = stereoReport;
+
+function onChunk(d) {
+  if (!d.mix) return;
+  peakL = d.peakL; peakR = d.peakR;
+  if (Math.max(d.peakL, d.peakR) > cfg.SILENCE_PEAK_THRESHOLD) lastSound = performance.now();
+
+  // L'énergie des deux canaux, datée en secondes d'audio : c'est elle qui dira
+  // à quel locuteur appartient chaque énoncé.
+  speakers?.push(d);
+  // Et la question préalable : ces deux canaux sont-ils vraiment deux signaux ?
+  if (cfg.STEREO_CHECK && cfg.TWO_SPEAKERS) stereoTick(d);
+
+  // Le disque D'ABORD, le réseau ensuite : l'enregistrement est la donnée
+  // irremplaçable, le direct est reproductible.
+  if (writable) {
+    const onDisk = d.stereo ?? d.mix;
+    diskWrite(new Uint8Array(onDisk.buffer, 0, onDisk.byteLength));
+    bytesWritten += onDisk.byteLength;
+    framesWritten += d.frames;      // frames PAR CANAL
+  }
+  // Gladia reçoit la SOMME des deux canaux, en mono : une seule session live est
+  // autorisée par le plan du compte (429 au-delà, vérifié contre l'API).
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    const payload = downsampleMono(d.mix, DOWN);
+    ws.send(payload.buffer);
+  }
+}
+
+// --- démarrage / arrêt -----------------------------------------------------
+$('b-start').onclick = async () => {
+  if (running) return;
+  $('b-start').disabled = true;
+  try {
+    if ($('rec').checked) {
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      fileHandle = await window.showSaveFilePicker({
+        suggestedName: `spectacle-${stamp}.wav`,
+        types: [{ description: 'WAV', accept: { 'audio/wav': ['.wav'] } }],
+      });
+      writable = await fileHandle.createWritable();
+      writeChain = Promise.resolve();
+      bytesWritten = 0; framesWritten = 0;
+    }
+
+    buildPipeline();
+    await startAudio($('devices').value || cfg.AUDIO_DEVICE_ID);
+
+    if (writable) {
+      await diskWrite(wavHeader(PROVISIONAL));
+      log(`Enregistrement : ${fileHandle.name}`);
+      setPill('p-rec', 'ouvert', 'ok', 'Enregistrement');
+    }
+    // L'en-tête est sur le disque : on peut laisser passer l'audio.
+    node.port.onmessage = (e) => onChunk(e.data);
+
+    const s = await initSession();
+    sessionUrl = s.url;
+    openSocket(sessionUrl);
+
+    running = true; stopping = false;
+    engineSel.disabled = true;
+    sessionStart = Date.now();
+    lastSound = performance.now();
+    pipeline.startAudioClock(performance.timeOrigin ? Date.now() : Date.now());
+    ticker = setInterval(() => pipeline.tick(), 100);
+    $('b-stop').disabled = false;
+    $('b-reconnect').disabled = false;
+    bc.postMessage({ type: 'clear' });
+    pushConfig();
+    keepAwake();
+  } catch (e) {
+    logErr('Démarrage : ' + (e.name === 'AbortError' ? 'sélection de fichier annulée.' : e.message));
+    await hardStop();
+    $('b-start').disabled = false;
+  }
+};
+
+let ticker = null;
+$('b-stop').onclick = () => stop();
+
+async function stop() {
+  if (!running) return;
+  stopping = true;
+  log('Arrêt…');
+  try { node?.port.postMessage({ flush: true }); await new Promise((r) => setTimeout(r, 80)); } catch {}
+  try { ws?.send(JSON.stringify({ type: 'stop_recording' })); } catch {}
+  await hardStop();
+  log('Arrêté.');
+}
+
+async function hardStop() {
+  running = false;
+  if (ticker) { clearInterval(ticker); ticker = null; }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  try { ws?.close(1000); } catch {}
+  ws = null;
+  try { srcNode?.disconnect(); node?.disconnect(); } catch {}
+  try { await ctx?.close(); } catch {}
+  ctx = null; node = null; srcNode = null;
+  stream?.getTracks().forEach((t) => t.stop());
+  stream = null;
+
+  if (writable) {
+    const w = writable; writable = null;
+    try {
+      await writeChain;
+      const dataSize = framesWritten * 2;   // mono, 16 bits
+      await w.write({ type: 'write', position: 0, data: wavHeader(dataSize) });
+      await w.close();
+      log(`Fichier fermé : ${(dataSize / 1048576).toFixed(1)} Mo, ` +
+          `${(framesWritten / cfg.CAPTURE_RATE / 60).toFixed(1)} min.`);
+      setPill('p-rec', 'fermé', 'ok', 'Enregistrement');
+    } catch (e) {
+      logErr('Fermeture WAV : ' + e.message + ' — récupérez le .crswap (voir README).');
+    }
+  }
+  captions.clear();
+  captionFlushNow();
+
+  $('b-start').disabled = false;
+  $('b-stop').disabled = true;
+  $('b-reconnect').disabled = true;
+  engineSel.disabled = false;
+  setPill('p-ws', 'arrêté', '', 'Gladia');
+}
+
+$('b-reconnect').onclick = () => {
+  if (!running) return;
+  log('Reconnexion manuelle.');
+  wsAttempts = 0;
+  try { ws?.close(4000, 'manuel'); } catch {}
+  if (!ws || ws.readyState === WebSocket.CLOSED) scheduleReconnect();
+};
+
+// --- contrôles d'affichage -------------------------------------------------
+function setBlackout(on) {
+  blackout = on;
+  $('b-blackout').classList.toggle('on', on);
+  $('b-blackout').innerHTML = on ? 'BLACKOUT ACTIF <span class="kbd">B</span>'
+                                 : 'BLACKOUT <span class="kbd">B</span>';
+  bc.postMessage({ type: 'blackout', on });
+  captionFlushNow();
+  log(on ? 'BLACKOUT — écran public masqué.' : 'Blackout levé.');
+}
+$('b-blackout').onclick = () => setBlackout(!blackout);
+// Touche unique, à portée de doigt.
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'b' || e.key === 'B') {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    e.preventDefault();
+    setBlackout(!blackout);
+  }
+});
+
+$('b-pause').onclick = () => {
+  paused = !paused;
+  $('b-pause').classList.toggle('on', paused);
+  $('b-pause').textContent = paused ? 'Reprendre pipeline' : 'Pause pipeline';
+  log(paused ? 'Pipeline en pause (l\'enregistrement continue).' : 'Pipeline repris.');
+};
+$('b-clear').onclick = () => {
+  pipeline?.clearQueue();
+  for (const f of feeds.values()) f.clear();
+  liveLines.clear();
+  bc.postMessage({ type: 'clear' });
+  captions.clear();
+  captionFlushNow();
+  renderPreview();
+  log('Écran vidé.');
+};
+$('b-open').onclick = () => {
+  window.open('display.html', 'surtitres', 'popup,width=1280,height=400');
+  log('Fenêtre d\'affichage ouverte — glissez-la sur l\'écran de scène puis F11.');
+};
+
+// --- mode fichier (OBS) ----------------------------------------------------
+//
+//  OBS relit un fichier texte en boucle ; on lui en tient un à jour par langue.
+//  L'écriture est faite par le serveur (chemin fixe, rename atomique) — voir
+//  /api/captions dans server.mjs.
+//
+//  Les envois sont GROUPÉS toutes les CAPTION_FLUSH_MS et seule une langue qui
+//  a changé part : l'écran avance mot à mot, ce qui ferait sinon une requête et
+//  une réécriture de fichier par mot, sous le nez d'OBS qui relit en continu.
+const OBS_KEY = 'obsFile';
+let obsOn = false, obsPaths = null, captionTimer = null, captionFailed = false;
+const captionSent = new Map();
+
+async function loadCaptionPaths() {
+  try {
+    const r = await fetch('/api/captions');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    obsPaths = (await r.json()).files || null;
+    for (const lang of captions.langs) {
+      const el = $(`obs-path-${lang}`);
+      if (el && obsPaths?.[lang]) el.value = obsPaths[lang];
+    }
+  } catch (e) {
+    obsPaths = null;
+    $('obs').disabled = true;
+    $('obs').parentElement.style.opacity = '.5';
+    logErr('Mode fichier indisponible : ' + e.message);
+  }
+}
+
+/** Ce qui doit être DANS les fichiers maintenant. Décoché ou blackout : rien. */
+const captionTexts = () => (obsOn && !blackout ? captions.texts() : captions.blank());
+
+async function captionFlush() {
+  if (!obsPaths) return;
+  const body = {};
+  for (const [lang, text] of Object.entries(captionTexts())) {
+    if (captionSent.get(lang) !== text) body[lang] = text;
+  }
+  if (Object.keys(body).length === 0) return;
+  try {
+    const r = await fetch('/api/captions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    for (const [lang, text] of Object.entries(body)) captionSent.set(lang, text);
+    captionFailed = false;
+  } catch (e) {
+    // Une seule alerte par panne : sinon le journal est noyé, à raison de
+    // plusieurs tentatives par seconde.
+    if (!captionFailed) { captionFailed = true; logErr('Fichiers de surtitres : ' + e.message); }
+  }
+}
+
+function captionSchedule() {
+  if (!obsOn || !obsPaths || captionTimer) return;
+  captionTimer = setTimeout(() => { captionTimer = null; captionFlush(); },
+                            cfg.CAPTION_FLUSH_MS ?? 150);
+}
+
+/** Blackout, arrêt, décochage : on vide SANS attendre le groupage. */
+function captionFlushNow() {
+  if (captionTimer) { clearTimeout(captionTimer); captionTimer = null; }
+  captionFlush();
+}
+
+$('obs').checked = localStorage.getItem(OBS_KEY) === '1';
+$('obs').onchange = () => {
+  obsOn = $('obs').checked;
+  localStorage.setItem(OBS_KEY, obsOn ? '1' : '0');
+  $('obs-paths').hidden = !obsOn;
+  captionFlushNow();
+  log(obsOn
+    ? `Mode fichier ACTIF — ${obsPaths ? Object.values(obsPaths).join('  et  ') : '?'}`
+    : 'Mode fichier arrêté — fichiers vidés.');
+};
+
+async function copyPath(lang) {
+  const el = $(`obs-path-${lang}`);
+  try {
+    await navigator.clipboard.writeText(el.value);
+  } catch {
+    // Presse-papiers refusé (fenêtre sans focus, permission) : la sélection
+    // manuelle reste possible, on la prépare.
+    el.select();
+    try { document.execCommand('copy'); } catch {}
+  }
+  $('obs-note').style.color = '#8FD18F';
+  setTimeout(() => { $('obs-note').style.color = ''; }, 900);
+  log(`Chemin ${lang.toUpperCase()} copié : ${el.value}`);
+}
+$('b-copy-fr').onclick = () => copyPath('fr');
+$('b-copy-en').onclick = () => copyPath('en');
+
+// Pas de `await` en tête de module : il retarderait tout le reste du câblage
+// (curseurs, raccourcis) le temps d'un aller-retour serveur.
+(async () => {
+  await loadCaptionPaths();
+  obsOn = $('obs').checked && !!obsPaths;
+  $('obs').checked = obsOn;
+  $('obs-paths').hidden = !obsOn;
+  if (obsOn) log(`Mode fichier ACTIF — ${Object.values(obsPaths).join('  et  ')}`);
+})();
+
+function pushConfig() {
+  bc.postMessage({ type: 'config', config: {
+    FONT_SIZE_VH: cfg.FONT_SIZE_VH, LINE_HEIGHT: cfg.LINE_HEIGHT,
+    MAX_CHARS_PER_LINE: cfg.MAX_CHARS_PER_LINE, MAX_LINES: cfg.MAX_LINES,
+    FADE_IN_MS: cfg.FADE_IN_MS,
+    SPEAKER_COLORS: cfg.SPEAKER_COLORS, TWO_SPEAKERS: cfg.TWO_SPEAKERS,
+    LANGUAGE_LABELS: cfg.LANGUAGE_LABELS,
+  } });
+}
+
+// --- sélecteur de moteur ---------------------------------------------------
+// Actif seulement à l'arrêt : la config de session Gladia (traduction native ou
+// non) est décidée à l'ouverture de la WebSocket, on ne la change pas en vol.
+const engineSel = $('engine');
+engineSel.value = localStorage.getItem('engine') || cfg.TRANSLATION_ENGINE;
+function refreshEngineNote() {
+  const claude = engineSel.value === 'claude';
+  $('engine-note').textContent = claude
+    ? 'traduction par blocs, retard tenable ≈ 2,5 s — demande ANTHROPIC_API_KEY'
+    : 'traduction en fin de phrase, retard tenable ≈ 6 s';
+  if (claude && anthropicMissing) {
+    logErr('Moteur Claude choisi mais ANTHROPIC_API_KEY est absente de .env.');
+  }
+}
+engineSel.onchange = () => {
+  localStorage.setItem('engine', engineSel.value);
+  cfg.TRANSLATION_ENGINE = engineSel.value;
+  refreshEngineNote();
+  // Le retard suit le moteur : viser 6 s en Claude ferait attendre le public
+  // pour rien, et viser 3,5 s en Gladia mettrait tout en rattrapage.
+  applyEngineDelay();
+  log(`Moteur au prochain démarrage : ${engineSel.value === 'claude' ? 'Claude Haiku' : 'Gladia natif'}`
+    + ` — retard ${cfg.DISPLAY_DELAY_MS} ms.`);
+};
+refreshEngineNote();
+const font = $('font');
+font.value = cfg.FONT_SIZE_VH; $('font-val').textContent = cfg.FONT_SIZE_VH + ' vh';
+font.oninput = () => {
+  cfg.FONT_SIZE_VH = +font.value;
+  $('font-val').textContent = cfg.FONT_SIZE_VH + ' vh';
+  localStorage.setItem('fontVh', cfg.FONT_SIZE_VH);
+  pushConfig();
+};
+// Le pipeline lit cfg.DISPLAY_DELAY_MS à chaque mot : le curseur agit en direct.
+// Augmenter marque une pause à l'écran, diminuer déclenche un rattrapage cadencé.
+//
+// Le retard est mémorisé PAR MOTEUR : leurs planchers n'ont rien à voir (≈ 6 s en
+// Gladia, ≈ 3,5 s en Claude), donc un réglage unique serait faux dans un cas ou
+// dans l'autre. Basculer de moteur ramène le retard de ce moteur.
+const delay = $('delay');
+const delayKey = () => `displayDelay:${engineSel.value}`;
+function applyEngineDelay() {
+  const saved = localStorage.getItem(delayKey());
+  const dflt = cfg.DISPLAY_DELAY_BY_ENGINE?.[engineSel.value] ?? CONFIG.DISPLAY_DELAY_MS;
+  cfg.DISPLAY_DELAY_MS = saved ? +saved : dflt;
+  delay.value = cfg.DISPLAY_DELAY_MS;
+  $('delay-val').textContent = cfg.DISPLAY_DELAY_MS + ' ms';
+}
+delay.oninput = () => {
+  cfg.DISPLAY_DELAY_MS = +delay.value;
+  $('delay-val').textContent = cfg.DISPLAY_DELAY_MS + ' ms';
+  localStorage.setItem(delayKey(), cfg.DISPLAY_DELAY_MS);
+};
+applyEngineDelay();
+{
+  const f = localStorage.getItem('fontVh');
+  if (f) { cfg.FONT_SIZE_VH = +f; font.value = f; $('font-val').textContent = f + ' vh'; }
+}
+
+// La fenêtre d'affichage tournait peut-être déjà : on se redemande.
+bc.postMessage({ type: 'ping' });
+bc.onmessage = (e) => {
+  if (e.data.type === 'display-ready') {
+    setPill('p-disp', 'connecté', 'ok', 'Affichage');
+    pushConfig();
+    bc.postMessage({ type: 'blackout', on: blackout });
+  }
+};
+
+// --- indicateurs -----------------------------------------------------------
+const toPct = (p) => (p <= 0 ? 0 : Math.max(0, Math.min(100, ((20 * Math.log10(p) + 60) / 60) * 100)));
+function frame() {
+  $('vu-l').style.width = toPct(peakL) + '%';
+  $('vu-r').style.width = toPct(peakR) + '%';
+  if (speakers) $('bal').style.left = speakers.balance() + '%';
+  $('al').classList.toggle('on', running && performance.now() - lastSound > cfg.SILENCE_ALERT_MS);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+setInterval(() => {
+  if (!running) return;
+  const ms = Date.now() - sessionStart;
+  const p = (n) => String(n).padStart(2, '0');
+  setPill('p-time', `${p(Math.floor(ms / 3600000))}:${p(Math.floor(ms % 3600000 / 60000))}:${p(Math.floor(ms % 60000 / 1000))}`,
+    ms > cfg.SESSION_MAX_MS ? 'bad' : '', 'Session');
+  if (writable) setPill('p-rec', `${(bytesWritten / 1048576).toFixed(1)} Mo`, 'ok', 'Enregistrement');
+
+  const m = pipeline.metrics();
+  const ms1 = (x) => (x == null ? '—' : Math.round(x) + ' ms');
+  $('m-med').textContent = m.latencyMedian == null ? '—'
+    : `${Math.round(m.latencyMedian)} / ${m.targetDelay} ms`;
+  $('m-p95').textContent = ms1(m.latencyP95);
+  $('m-late').textContent = `${m.lateWords} (max ${ms1(m.maxLateness)})`;
+  $('m-gap').textContent = ms1(m.maxGap);
+  $('m-div').textContent = m.divergenceRate == null ? '— (moteur Gladia)'
+    : (m.divergenceRate * 100).toFixed(1) + ' %';
+  $('m-blocks').textContent = m.wordsDisplayed;
+  $('m-queued').textContent = m.queued;
+  $('m-utt').textContent = m.utterances;
+  const sum = (pre) => Object.entries(m.perStage)
+    .filter(([k]) => k.startsWith(pre)).reduce((n, [, v]) => n + v.words, 0);
+  $('m-split').textContent = `${sum('L:')} / ${sum('R:')}`;
+  $('m-unattr').textContent = m.unattributed
+    + (m.identityFiltered ? `  (${m.identityFiltered} identités filtrées)` : '');
+  $('m-engine').textContent = m.engine === 'gladia' ? 'Gladia (fin de phrase)' : 'Claude Haiku (par bloc)';
+  $('m-pending').textContent = m.translations
+    ? `${m.pendingBlocks} / ${m.pendingWords}  (${m.translations.failed} échouées)` : '—';
+
+  // La pastille suit l'ÉCART au retard visé, pas la latence brute : un retard de
+  // 5 s conforme à la cible est sain, un retard de 5 s quand on visait 2,5 s non.
+  const drift = m.latencyMedian == null ? null : m.latencyMedian - m.targetDelay;
+  setPill('p-tr', drift == null ? '—' : (drift >= 0 ? '+' : '') + Math.round(drift) + ' ms',
+    drift == null ? '' : drift > 1500 ? 'bad' : drift > 700 ? 'warn' : 'ok', 'Retard');
+
+  // Silence prolongé : on efface. Pas avant — un écran qui se vide attire
+  // l'œil pour rien.
+  if (lastDisplay && performance.now() - lastDisplay > cfg.CLEAR_AFTER_SILENCE_MS) {
+    if ([...feeds.values()].some((f) => f.lines().length > 0)) {
+      for (const f of feeds.values()) f.clear();
+      liveLines.clear();
+      bc.postMessage({ type: 'clear' });
+      captions.clear();
+      captionFlushNow();
+      renderPreview();
+    }
+  }
+}, 1000);
+
+let wakeLock = null;
+async function keepAwake() {
+  try { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
+  catch { log('Wake Lock indisponible (pas critique).'); }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && running && !wakeLock) keepAwake();
+});
+window.addEventListener('beforeunload', (e) => { if (running) { e.preventDefault(); e.returnValue = ''; } });
+</script>
+</body>
+</html>

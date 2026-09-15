@@ -1,0 +1,5 @@
+.env
+*.wav
+*.crswap
+node_modules/
+tests/tmp/

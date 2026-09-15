@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Surtitres Live
+GenericName=Surtitrage temps réel
+Comment=Surtitrage FR vers EN en direct pour spectacle, affichage append-only
+Exec=__SCRIPT__
+Icon=captive-transcription
+Terminal=false
+Categories=AudioVideo;Audio;
+StartupNotify=true
+StartupWMClass=SurtitresLive
+Keywords=surtitres;surtitles;sous-titres;traduction;translation;live;direct;spectacle;theatre;gladia;claude;

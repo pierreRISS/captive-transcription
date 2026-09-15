@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Surtitres</title>
+<style>
+  :root {
+    --fs: 3.6vh; --lh: 1.3; --maxch: 32; --fade: 120ms; --lines: 4;
+    --col-L: #8FD1E6; --col-R: #E6C88F;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    color: #fff;
+    overflow: hidden;
+    cursor: none;
+    /* Sans-serif, graisse medium, ni italique ni capitales. */
+    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 500;
+  }
+
+  /* GRILLE FIXE : une colonne par LANGUE, une ligne par locuteur.
+     Toutes les dimensions sont figées — aucune case ne change jamais de taille,
+     donc rien ne bouge quand un texte arrive ou sort. */
+  #stage {
+    position: absolute;
+    inset: 3vh 2vw;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    /* Rangées à la taille de leur contenu (fixe), et l'ensemble ancré en BAS :
+       le bloc reste compact, sans trou entre les deux locuteurs, et le bas de
+       l'écran — là où l'œil revient — porte toujours le présent. */
+    grid-template-rows: auto auto auto;
+    column-gap: 3vw;
+    row-gap: 2.2vh;
+    align-content: end;
+  }
+
+  .head {
+    font-size: 1.7vh;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: #7A7A7A;
+    padding-bottom: .4vh;
+    border-bottom: 1px solid #262626;
+  }
+
+  /* Une case = un locuteur × une langue. Hauteur FIXE de --lines lignes,
+     contenu ancré en bas : le texte monte, il ne se recentre pas. */
+  .cell {
+    font-size: var(--fs);
+    height: calc(var(--fs) * var(--lh) * var(--lines));
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    border-left: .35vh solid transparent;
+    padding-left: .8vw;
+  }
+  .cell[data-speaker="L"] { border-left-color: var(--col-L); color: var(--col-L); }
+  .cell[data-speaker="R"] { border-left-color: var(--col-R); color: var(--col-R); }
+
+  .line {
+    line-height: var(--lh);
+    text-align: left;
+    white-space: nowrap;
+    /* Superposition éventuelle à une projection : l'ombre garde le texte lisible. */
+    text-shadow: 0 2px 8px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9);
+  }
+  /* Les lignes plus anciennes s'estompent : l'œil va au bas de la case, qui est
+     le présent, sans perdre la possibilité de relire au-dessus. */
+  .line:nth-last-child(3) { opacity: .55; }
+  .line:nth-last-child(4) { opacity: .35; }
+  .line:nth-last-child(n+5) { opacity: .25; }
+
+  /* Un mot apparaît quand il a été prononcé (+ le retard constant). Le fondu
+     très court évite le « pop » sans introduire de mouvement. */
+  .w { animation: in var(--fade) ease-out both; }
+  @keyframes in { from { opacity: 0 } to { opacity: 1 } }
+
+  /* Blackout : instantané, sans transition. */
+  body.blackout #stage { visibility: hidden; }
+  /* Un seul locuteur : sa ligne seulement. */
+  body.solo .cell[data-speaker="R"] { display: none; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div class="head" id="head-fr" style="grid-column:1;grid-row:1">Français</div>
+  <div class="head" id="head-en" style="grid-column:2;grid-row:1">English</div>
+
+  <div class="cell" data-speaker="L" data-stream="L:fr" style="grid-column:1;grid-row:2"></div>
+  <div class="cell" data-speaker="L" data-stream="L:en" style="grid-column:2;grid-row:2"></div>
+  <div class="cell" data-speaker="R" data-stream="R:fr" style="grid-column:1;grid-row:3"></div>
+  <div class="cell" data-speaker="R" data-stream="R:en" style="grid-column:2;grid-row:3"></div>
+</div>
+
+<script type="module">
+// ---------------------------------------------------------------------------
+//  Vue publique. Grille FIXE : une colonne par langue, une ligne par locuteur.
+//
+//  Un spectateur francophone regarde toujours la colonne de gauche, même quand
+//  un locuteur change de langue : dans ce cas la case reçoit la traduction au
+//  lieu de l'original, mais elle ne déménage pas.
+//
+//  Elle ne calcule rien, et surtout elle ne cadence rien : la régie lui envoie
+//  les lignes d'un flux à chaque MOT ajouté, au moment exact où ce mot doit
+//  apparaître. Ici on ne fait que la différence avec ce qui est déjà à l'écran.
+//
+//  Réconciliation par identifiant, à deux niveaux : les lignes par `id`, les
+//  mots par leur position dans la ligne. Un mot déjà écrit n'est JAMAIS réécrit,
+//  ni déplacé, ni re-animé — on n'ajoute que les spans manquants. C'est le
+//  critère d'acceptation n°1 appliqué jusqu'au rendu.
+//
+//  Aucune partial, aucun texte grisé, aucun curseur, aucun compteur.
+// ---------------------------------------------------------------------------
+import { CONFIG, CHANNEL } from './config/surtitles.js';
+
+// Un conteneur et une table de nœuds PAR FLUX ('L:fr', 'L:en', 'R:fr', 'R:en').
+const boxes = new Map();
+const nodes = new Map();
+for (const el of document.querySelectorAll('[data-stream]')) {
+  boxes.set(el.dataset.stream, el);
+  nodes.set(el.dataset.stream, new Map());
+}
+
+function render(key, lines) {
+  const box = boxes.get(key);
+  if (!box) return;
+  const known = nodes.get(key);
+  const keep = new Set(lines.map((l) => l.id));
+
+  // Les lignes sorties par le haut disparaissent.
+  for (const [id, node] of known) {
+    if (!keep.has(id)) { node.remove(); known.delete(id); }
+  }
+
+  for (const l of lines) {
+    let node = known.get(l.id);
+    if (!node) {
+      node = document.createElement('div');
+      node.className = 'line';
+      box.appendChild(node);
+      known.set(l.id, node);
+    }
+    // APPEND-ONLY jusqu'au DOM : on n'ajoute que les mots qui manquent. Les
+    // spans déjà là ne sont pas touchés, donc leur fondu ne rejoue pas.
+    for (let i = node.childElementCount; i < l.words.length; i++) {
+      const s = document.createElement('span');
+      s.className = 'w';
+      s.textContent = (i === 0 ? '' : ' ') + l.words[i].text;
+      node.appendChild(s);
+    }
+  }
+
+  // Ordre vertical. On ne déplace un nœud que s'il est réellement mal placé :
+  // un appendChild inutile compte comme un ré-insert et relancerait l'animation
+  // de tous ses mots.
+  let prev = null;
+  for (const l of lines) {
+    const node = known.get(l.id);
+    const expected = prev ? prev.nextElementSibling : box.firstElementChild;
+    if (node !== expected) box.insertBefore(node, expected);
+    prev = node;
+  }
+}
+
+function clearAll() {
+  for (const [, known] of nodes) {
+    for (const [, node] of known) node.remove();
+    known.clear();
+  }
+}
+
+function applyConfig(c) {
+  const root = document.documentElement.style;
+  const g = (k) => c[k] ?? CONFIG[k];
+  root.setProperty('--fs', g('FONT_SIZE_VH') + 'vh');
+  root.setProperty('--lh', g('LINE_HEIGHT'));
+  root.setProperty('--maxch', g('MAX_CHARS_PER_LINE'));
+  root.setProperty('--fade', g('FADE_IN_MS') + 'ms');
+  root.setProperty('--lines', g('MAX_LINES'));
+  const colors = g('SPEAKER_COLORS') || {};
+  if (colors.L) root.setProperty('--col-L', colors.L);
+  if (colors.R) root.setProperty('--col-R', colors.R);
+  const labels = g('LANGUAGE_LABELS') || {};
+  for (const [code, el] of [['fr', document.getElementById('head-fr')],
+                            ['en', document.getElementById('head-en')]]) {
+    if (labels[code]) el.textContent = labels[code];
+  }
+  document.body.classList.toggle('solo', g('TWO_SPEAKERS') === false);
+}
+
+const bc = new BroadcastChannel(CHANNEL);
+bc.onmessage = (e) => {
+  const m = e.data;
+  switch (m.type) {
+    case 'stream': render(m.key, m.lines); break;
+    case 'clear': clearAll(); break;
+    case 'blackout': document.body.classList.toggle('blackout', !!m.on); break;
+    case 'config': applyConfig(m.config || {}); break;
+    case 'ping': bc.postMessage({ type: 'display-ready' }); break;
+  }
+};
+bc.postMessage({ type: 'display-ready' });
+
+applyConfig({});
+
+// L'écran ne doit jamais s'éteindre pendant le spectacle.
+let wakeLock = null;
+async function keepAwake() {
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+}
+keepAwake();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !wakeLock) keepAwake();
+});
+
+// Plein écran au clic (F11 marche aussi).
+document.addEventListener('click', () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+});
+</script>
+</body>
+</html>
